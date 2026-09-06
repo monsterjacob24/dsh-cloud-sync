@@ -1,0 +1,17 @@
+# M4 e2e patch：cloud-sync 全量预配（免 UI 配置）+ 文件触发 driver。
+# 相对路径相对本文件所在目录解析。端口与 run.sh 的 PORT 默认值一致。
+- insert:
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+    - id: cloud-sync
+      name: ../../../src/index.ts
+      config:
+        serverUrl: http://127.0.0.1:8872
+        token: e2e-token
+        passphrase: seed-pass
+        deviceName: m4-local
+        uploadDebounceMs: 200
+        pollIntervalMs: 1000
+        requestTimeoutMs: 5000
+    - id: m4-driver
+      name: ./driver.ts

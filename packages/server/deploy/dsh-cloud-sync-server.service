@@ -1,0 +1,25 @@
+# dsh-cloud-sync 参考服务端 systemd 单元（docs/03-server-protocol.md §11）
+# 安装：cp dsh-cloud-sync-server.service /etc/systemd/system/ && systemctl enable --now dsh-cloud-sync-server
+# 前提：/opt/dsh-cloud-sync/ 下放置本包并以 node --import tsx src/index.ts 启动（或直接部署编译产物）
+[Unit]
+Description=dsh-cloud-sync reference server
+After=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+Environment=PORT=8787
+Environment=DATA_DIR=/var/lib/dsh-cloud-sync
+EnvironmentFile=-/etc/dsh-cloud-sync/env
+WorkingDirectory=/opt/dsh-cloud-sync
+ExecStart=/usr/bin/node --import tsx src/index.ts
+Restart=always
+RestartSec=2
+StateDirectory=dsh-cloud-sync
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dsh-cloud-sync
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+.history
+node_modules
+.env
+.claude/settings.local.json
+dist
+*.log
+.DS_Store
+docs/
+.npmrc
+.playwright-mcp
+packages/*/lib/
+packages/server/data/
+*.tgz

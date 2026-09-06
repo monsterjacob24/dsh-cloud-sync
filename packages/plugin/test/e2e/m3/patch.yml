@@ -1,0 +1,13 @@
+# M3 e2e patch：挂 cloud-sync（不含凭据，走"未配置→UI 配置"路径）与文件触发 driver。
+# 相对路径相对本文件所在目录解析。
+- insert:
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+    - id: cloud-sync
+      name: ../../../src/index.ts
+      config:
+        uploadDebounceMs: 200
+        pollIntervalMs: 1000
+        requestTimeoutMs: 5000
+    - id: m3-driver
+      name: ./driver.ts

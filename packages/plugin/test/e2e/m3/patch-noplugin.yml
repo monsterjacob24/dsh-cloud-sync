@@ -1,0 +1,4 @@
+# M3 验收用：不含 cloud-sync 的 patch，验证插件卸载后设置弹窗无残留。
+- insert:
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'

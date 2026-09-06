@@ -1,0 +1,15 @@
+{
+  "name": "dsh-cloud-sync-server",
+  "version": "0.1.0",
+  "description": "Reference dumb-storage server for dsh-cloud-sync protocol v1",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "dsh-cloud-sync-server": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "license": "MIT"
+}

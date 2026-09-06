@@ -1,0 +1,16 @@
+# 开发调试 patch：只挂 cloud-sync 源码入口（不含 e2e driver，不需要环境变量）。
+# 用法（cwd 必须在 dsh 仓库根，patch 路径用绝对路径）：
+#   cd /path/to/deepseek-harness
+#   node --import tsx/esm apps/cli/src/bin.ts --profile web \
+#     --patch /path/to/dsh-cloud-sync/packages/plugin/test/e2e/dev.patch.yml
+# 相对路径相对本文件所在目录解析。凭据留空 → 启动后走「未配置 → 设置卡配置」路径；
+# 也可以在这里直接写 serverUrl/token/passphrase/deviceName。
+- insert:
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+    - id: cloud-sync
+      name: ../../src/index.ts
+      config:
+        uploadDebounceMs: 200
+        pollIntervalMs: 1000
+        requestTimeoutMs: 5000

@@ -1,0 +1,18 @@
+# dsh --patch overlay：把 cloud-sync 插件（源码入口）与 e2e 驱动挂进默认 profile。
+# 相对路径相对本文件所在目录解析（dsh anchorInsertedPluginNames）。
+- insert:
+    # 控制台 logger：web profile 默认无日志输出，排障需要
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+    - id: cloud-sync
+      name: ../../src/index.ts
+      config:
+        serverUrl: http://127.0.0.1:8871
+        token: e2e-token
+        passphrase: e2e-passphrase
+        deviceName: e2e-device
+        uploadDebounceMs: 200
+        pollIntervalMs: 1000
+        requestTimeoutMs: 5000
+    - id: e2e-driver
+      name: ./driver.ts
