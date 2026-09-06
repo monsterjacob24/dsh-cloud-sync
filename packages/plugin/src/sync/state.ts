@@ -17,6 +17,8 @@ export interface SessionSyncState {
   lastTag: string
   /** 上次处理到的 sessionPersistence revision（不透明令牌） */
   localRevision: string
+  /** 恢复抑制标记（markRestoredSynced 写入）：本地续写前不回传 */
+  restoredAt?: number
   /** meta 折叠累积 */
   eventCount: number
   title?: string
@@ -47,6 +49,7 @@ const sessionStateSchema = z.object({
   lastSegmentIndex: z.number().int().min(-1),
   lastTag: z.string(),
   localRevision: z.string(),
+  restoredAt: z.number().optional(),
   eventCount: z.number().int().nonnegative(),
   title: z.string().optional(),
   updatedAt: z.number(),

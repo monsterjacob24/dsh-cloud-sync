@@ -177,6 +177,82 @@ describe('SyncEngine 上行', () => {
     await engine.dispose()
   })
 
+  it('未物化会话（v1 list 含无文件项）：ENOENT 静默跳过，不算失败不重试', async () => {
+    const tmp = await tmpdir()
+    const server = new FakeServer()
+    const persistence = new FakePersistence(tmp)
+    const h = header('s_ghost')
+    await persistence.addSession(h, [await headerFrame(h)])
+    // 模拟 v1「已创建未物化」：locate 有路径、磁盘无文件
+    await fsp.rm(persistence.files.get('s_ghost')!)
+
+    const { engine, state } = await makeEngine(tmp, server, persistence)
+    const result = await engine.syncAllNow()
+
+    assert.equal(result.failed, 0)
+    assert.equal(server.objects.size, 0, '不应上传任何对象')
+    assert.equal(state.getSession('s_ghost')?.localRevision, 'rev-1', 'revision 已记录，物化变更后才会重新调度')
+    await engine.dispose()
+  })
+
+  it('布局失配（目录里有 canonical 日志但 locate 指错路径）：报错可见而非静默成功', async () => {
+    const tmp = await tmpdir()
+    const server = new FakeServer()
+    const persistence = new FakePersistence(tmp)
+    const h = header('s_mismatch')
+    await persistence.addSession(h, [await headerFrame(h)])
+    // locate 指向的文件不存在，但其目录里出现 canonical 形态日志（如上游
+    // 再改代命名）：这是失配，不是未物化
+    await fsp.rm(persistence.files.get('s_mismatch')!)
+    await fsp.writeFile(path.join(tmp, 'session.v9.jsonl.zstd'), 'x')
+
+    const { engine } = await makeEngine(tmp, server, persistence)
+    const result = await engine.syncAllNow()
+
+    assert.equal(result.failed, 1, '失配必须计入失败暴露给用户')
+    assert.match(result.firstError ?? '', /layout mismatch/)
+    await engine.dispose()
+  })
+
+  it('污染自愈：uploadedBytes=0 但 localRevision 已记（曾被静默跳过）的会话重新上传', async () => {
+    const tmp = await tmpdir()
+    const server = new FakeServer()
+    const persistence = new FakePersistence(tmp)
+    const h = header('s_poisoned')
+    await persistence.addSession(h, [await headerFrame(h)])
+
+    const { engine, state } = await makeEngine(tmp, server, persistence)
+    // 预置被旧 bug 污染的条目：从未上传任何字节，revision 却记为当前值
+    await state.putSession('s_poisoned', {
+      uploadedBytes: 0, remoteBytes: 0, lastSegmentIndex: -1, lastTag: '',
+      localRevision: 'rev-1', eventCount: 0, updatedAt: 0, status: 'ok',
+    })
+    const result = await engine.syncAllNow()
+
+    assert.equal(result.ok, 1, '污染条目必须视为待同步并成功上传')
+    assert.ok(server.objects.size > 0, '云端应出现对象')
+    await engine.dispose()
+  })
+
+  it('恢复抑制（restoredAt）不被自愈判定误伤：revision 未变时不回传', async () => {
+    const tmp = await tmpdir()
+    const server = new FakeServer()
+    const persistence = new FakePersistence(tmp)
+    const h = header('s_restored')
+    await persistence.addSession(h, [await headerFrame(h)])
+
+    const { engine, state } = await makeEngine(tmp, server, persistence)
+    await state.putSession('s_restored', {
+      uploadedBytes: 0, remoteBytes: 0, lastSegmentIndex: -1, lastTag: '',
+      localRevision: 'rev-1', restoredAt: Date.now(), eventCount: 0, updatedAt: 0, status: 'ok',
+    })
+    const result = await engine.syncAllNow()
+
+    assert.equal(result.ok, 0, '恢复落位未续写的会话不应回传')
+    assert.equal(server.objects.size, 0)
+    await engine.dispose()
+  })
+
   it('增量：第二轮只追加新增帧，云端解出完整文件', async () => {
     const tmp = await tmpdir()
     const server = new FakeServer()

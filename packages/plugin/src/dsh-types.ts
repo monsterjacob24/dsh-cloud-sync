@@ -30,6 +30,11 @@ export interface SessionLocationLike {
   readonly path: string
 }
 
+/**
+ * 引擎/恢复消费的持久化端口。宿主可能是 v0（rc.1：listSnapshots/locate 齐备）
+ * 或 v1（0.1.3-alpha.1+：list() 返回快照、locate 私有化），由
+ * sync/persistence-port.ts 做运行时归一；本接口始终是 v0 形态。
+ */
 export interface SessionPersistenceLike {
   listSnapshots(signal?: AbortSignal): Promise<SessionSnapshotLike[]>
   list(signal?: AbortSignal): Promise<SessionHeaderLike[]>

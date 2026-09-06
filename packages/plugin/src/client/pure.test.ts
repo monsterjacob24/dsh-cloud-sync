@@ -36,7 +36,7 @@ test('isValidServerUrl：空串合法（未填），仅接受 http(s)', () => {
 
 test('isValidDeviceName：空串合法，字符集与长度受限', () => {
   assert.equal(isValidDeviceName(''), true)
-  assert.equal(isValidDeviceName('monsterjacob-mbp'), true)
+  assert.equal(isValidDeviceName('alice-mbp'), true)
   assert.equal(isValidDeviceName('a'.repeat(32)), true)
   assert.equal(isValidDeviceName('a'.repeat(33)), false)
   assert.equal(isValidDeviceName('有空格'), false)

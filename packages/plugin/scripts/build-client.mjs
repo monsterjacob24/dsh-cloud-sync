@@ -19,8 +19,11 @@ const BASELINE_EXTERNALS = [
   '@deepseek-ai/dsh-client-ui-primitives',
 ]
 
+/** 插件包名：注册 id 必须与 loader 期望的 entry 名一致，从 package.json 读取避免改名遗漏。 */
+const packageName = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name
+
 /** 加载器交接包装（与 dsh 内置 UI 包的 tsdown 产物形态一致）。 */
-const BANNER = 'window.__ModuleLoader__.load({ id: "dsh-cloud-sync", factory: (require) => { var module = { exports: {} }; var exports = module.exports;'
+const BANNER = `window.__ModuleLoader__.load({ id: ${JSON.stringify(packageName)}, factory: (require) => { var module = { exports: {} }; var exports = module.exports;`
 const FOOTER = 'return module.exports; } });'
 
 const outFile = fileURLToPath(new URL('../lib/client.js', import.meta.url))

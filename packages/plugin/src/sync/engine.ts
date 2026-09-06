@@ -6,6 +6,7 @@
  * → meta 覆写 → 推进本地 state。与 cordis 解耦，纯类便于单测。
  */
 import fsp from 'node:fs/promises'
+import path from 'node:path'
 import { LogEncryptor, encryptMeta, verifyTailSegment, type SessionMeta } from '../crypto/envelope.js'
 import type { SessionHeaderLike, SessionPersistenceLike, SessionSnapshotLike } from '../dsh-types.js'
 import { detectEncoding, emptyFold, foldFrame, scanZstdFrames } from './frames.js'
@@ -141,6 +142,10 @@ export class SyncEngine {
       this.backoff.delete(snapshot.header.id)
       return true
     }
+    // 自愈：从未上传过任何字节、又不是恢复抑制（restoredAt）的条目，其
+    // localRevision 记录不可信——历史上被「ENOENT 静默跳过」污染过的会话
+    // 曾因此永远卡在「已同步」假象里。一律视为待同步，宁可重试不可漏传。
+    if (state !== undefined && state.uploadedBytes === 0 && !state.restoredAt) return true
     if (state?.localRevision === snapshot.revision && wait === undefined) return false
     return true
   }
@@ -292,7 +297,30 @@ export class SyncEngine {
       return
     }
 
-    const stat = await fsp.stat(location.path)
+    let stat: { size: number }
+    try {
+      stat = await fsp.stat(location.path)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      // 区分两种 ENOENT：目录里有 canonical 日志（session[.vN].jsonl[.zstd]）而
+      // locate 指的路径不存在 = 布局推导失配（上游改名/改布局），静默跳过会把
+      // 失配伪装成「已同步」（曾表现为「成功 0」无任何报错），必须抛错暴露；
+      // 目录不存在或只有 session.lock（v1 后端 lock 先建目录、首个 append 才
+      // 物化日志）= 真未物化，记 revision 静默跳过，物化后 revision 变化自然重调度。
+      const dirEntries = await fsp.readdir(path.dirname(location.path)).catch(
+        (dirError: NodeJS.ErrnoException) => {
+          if (dirError.code === 'ENOENT') return [] as string[]
+          throw dirError
+        },
+      )
+      const hasCanonicalLog = dirEntries.some((name) => /^session(\.v\d+)?\.jsonl(\.zstd)?$/.test(name))
+      if (hasCanonicalLog) {
+        throw new Error(`session log artifact not found at derived path (layout mismatch?): ${location.path}`)
+      }
+      state.localRevision = revision
+      await store.putSession(id, state)
+      return
+    }
     if (stat.size < state.uploadedBytes) {
       // 文件变短（防御：正常不可达）——回退全量重传
       Object.assign(state, freshSessionState())

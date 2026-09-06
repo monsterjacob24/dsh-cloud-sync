@@ -443,8 +443,13 @@ export const CARD_CSS = `
   cursor: pointer;
 }
 .dsh-cloud-sync-restore__manual {
-  flex: 1;
+  /* 显式撑满单元格 + 收缩上限：不依赖 flex 对 input 的宽度分配
+     （flex: 1 1 0% 在渲染环境里会随输入内容漂移——变长或缩窄） */
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   height: 26px;
   padding: 0 8px;
   border: 1px solid var(--dsw-alias-border-l2);

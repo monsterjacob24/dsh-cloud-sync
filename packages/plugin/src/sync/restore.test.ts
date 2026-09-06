@@ -21,6 +21,7 @@ import {
   fetchCatalog,
   learnMapping,
   markRestoredSynced,
+  normalizeTargetCwd,
   parseHeaderFromLog,
   resolveTargetCwd,
   restoreSessions,
@@ -138,6 +139,15 @@ function catalogDeps(client: FakeClient, state: FakeStateStore, persistence: Fak
 }
 
 // ---- 纯函数：路径解析 ----
+
+test('normalizeTargetCwd：~ 与相对路径落到本机 home，绝对路径原样', () => {
+  const home = os.homedir()
+  assert.equal(normalizeTargetCwd('~/my-app'), path.join(home, 'my-app'))
+  assert.equal(normalizeTargetCwd('~'), home)
+  assert.equal(normalizeTargetCwd('my-app'), path.join(home, 'my-app'))
+  assert.equal(normalizeTargetCwd('/Users/alice/my-app'), '/Users/alice/my-app')
+  assert.equal(normalizeTargetCwd(''), '')
+})
 
 test('tailSegment 取路径最后一个非空段', () => {
   assert.equal(tailSegment('/home/alice/p/proj'), 'proj')
@@ -267,6 +277,30 @@ test('fetchCatalog：解密全设备 meta 并标注 existsLocal / 版本 / 路�
   assert.equal(s3.versionIncompatible, true, 'formatVersion 高于本机即不兼容')
 })
 
+test('fetchCatalog：兼容基准随本机会话 header 的 version 自适应（上游 bump 后不再误判）', async () => {
+  const client = new FakeClient()
+  // 云端 meta 与本机 header 同为 v3：以本机运行时版本为基准应判兼容
+  client.objects.set('sessions/device-a/s-9.meta.enc', encryptMeta(key, salt, 's-9', makeMeta('s-9', { formatVersion: 3 })))
+  client.objects.set('sessions/device-a/s-8.meta.enc', encryptMeta(key, salt, 's-8', makeMeta('s-8', { formatVersion: 4 })))
+  const persistence = new FakePersistence('/unused', [{ ...HEADER, id: 'local-1', version: 3 }])
+  const entries = await fetchCatalog(catalogDeps(client, new FakeStateStore(), persistence))
+  const s9 = entries.find((entry) => entry.sessionId === 's-9')!
+  assert.equal(s9.versionIncompatible, false, '等于本机版本应兼容')
+  const s8 = entries.find((entry) => entry.sessionId === 's-8')!
+  assert.equal(s8.versionIncompatible, true, '高于本机版本仍应拒绝')
+})
+
+test('fetchCatalog：本地无任何会话时以 LOCAL_FORMAT_VERSION 常量兜底', async () => {
+  const client = new FakeClient()
+  client.objects.set('sessions/device-a/s-1.meta.enc', encryptMeta(key, salt, 's-1', makeMeta('s-1', { formatVersion: 2 })))
+  client.objects.set('sessions/device-a/s-2.meta.enc', encryptMeta(key, salt, 's-2', makeMeta('s-2', { formatVersion: 3 })))
+  const entries = await fetchCatalog(catalogDeps(client, new FakeStateStore(), new FakePersistence('/unused')))
+  const s1 = entries.find((entry) => entry.sessionId === 's-1')!
+  assert.equal(s1.versionIncompatible, false, 'v2 等于当前 dsh SESSION_FORMAT_VERSION，应兼容')
+  const s2 = entries.find((entry) => entry.sessionId === 's-2')!
+  assert.equal(s2.versionIncompatible, true)
+})
+
 test('fetchCatalog：口令不匹配（meta 解不开）的行跳过并告警，不打断目录', async () => {
   const client = new FakeClient()
   const wrongKey = deriveKey('wrong', salt)
@@ -305,6 +339,25 @@ test('restoreSessions：无映射时原样落位到 locate() 路径', async () =
     const written = await fsp.readFile(persistence.locate({ ...HEADER, id: 's-1' }).path)
     assert.ok(written.equals(log), '无映射恢复的字节必须与云端明文一致')
     assert.deepEqual(state.global.pathMappings, [], '未改选目录时不学习映射')
+  } finally {
+    await fsp.rm(root, { recursive: true, force: true })
+  }
+})
+
+test('restoreSessions：目标为 ~ 时展开到本机 home 落位（跨机相对路径心智）', async () => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'dsh-restore-'))
+  try {
+    const client = new FakeClient()
+    const log = await makeLog({ ...HEADER, id: 's-1', cwd: '/Users/alice/my-app' }, EVENTS)
+    await seedCloudSession(client, 'device-a', 's-1', log)
+    const state = new FakeStateStore()
+    const persistence = new FakePersistence(root)
+    const deps: RestoreDeps = { client: client as never, key, persistence, state }
+
+    const result = await restoreSessions(deps, [{ sessionId: 's-1', device: 'device-a', targetCwd: '~' }])
+    assert.deepEqual({ ok: result.ok, failed: result.failed }, { ok: 1, failed: 0 })
+    assert.equal(persistence.located[0].cwd, os.homedir(), '~ 展开后改写 header.cwd')
+    assert.deepEqual(state.global.pathMappings, [{ from: '/Users/alice/my-app', to: os.homedir() }], '学习来源→本机 home 的映射')
   } finally {
     await fsp.rm(root, { recursive: true, force: true })
   }
@@ -532,6 +585,7 @@ test('markRestoredSynced：以当前 revision 记入 state，引擎不再视为�
   assert.equal(stored.uploadedBytes, 0)
   assert.equal(stored.lastSegmentIndex, -1)
   assert.equal(stored.status, 'ok')
+  assert.ok(stored.restoredAt !== undefined, '恢复抑制标记：自愈判定不把它当污染条目')
   assert.equal(state.getSession('other'), undefined, '不在恢复清单里的会话不动')
 })
 

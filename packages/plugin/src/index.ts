@@ -12,6 +12,7 @@ import { runConnectionCheck } from './status.js'
 import { SyncEngine } from './sync/engine.js'
 import { ProtocolError, SyncClient } from './sync/http-client.js'
 import { bootstrapKdf } from './sync/kdf.js'
+import { createPersistencePort } from './sync/persistence-port.js'
 import {
   countRemoteOnlySessions,
   decodeMappingDelete,
@@ -182,6 +183,11 @@ export async function apply(ctx: Context, config: ConfigT): Promise<() => Promis
     return current().deviceName || os.hostname()
   }
 
+  /** sessionPersistence 双版本端口（v0 透传 / v1 list+布局推导，见 persistence-port.ts）。 */
+  function persistencePort() {
+    return createPersistencePort(ctx.sessionPersistence, path.join(dshHome(ctx), 'sessions'))
+  }
+
   /** 本机工作区 canonical path 列表（workspaceRegistry 可选注入，缺失即无尾段建议）。 */
   function workspacePaths(): string[] {
     return ctx.get('workspaceRegistry')?.list().map((workspace) => workspace.path) ?? []
@@ -196,7 +202,7 @@ export async function apply(ctx: Context, config: ConfigT): Promise<() => Promis
     return {
       client,
       key,
-      persistence: ctx.sessionPersistence,
+      persistence: persistencePort(),
       state: stateStore,
       workspacePaths: workspacePaths(),
       // 恢复落位后的 workspace 挂载（web 侧边栏可见性）。复刻 dsh 自己创建会话的
@@ -309,7 +315,7 @@ export async function apply(ctx: Context, config: ConfigT): Promise<() => Promis
       salt,
       device,
       state: stateStore,
-      persistence: ctx.sessionPersistence,
+      persistence: persistencePort(),
       getConfig: () => current(),
       onEvent: (event) => {
         if (event.kind === 'error' || event.kind === 'conflict') {

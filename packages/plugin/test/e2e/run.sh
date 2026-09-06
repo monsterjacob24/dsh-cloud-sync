@@ -4,7 +4,7 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
-DSH=/Users/monsterjacob/github-project/deepseek-harness
+DSH="${DSH:-$HOME/github-project/deepseek-harness}"
 PORT=8871
 TOKEN=e2e-token
 WORK="$(mktemp -d /tmp/dcs-e2e.XXXXXX)"

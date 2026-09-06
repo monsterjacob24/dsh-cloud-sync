@@ -10,7 +10,7 @@ set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../../../.." && pwd)"
-DSH=/Users/monsterjacob/github-project/deepseek-harness
+DSH="${DSH:-$HOME/github-project/deepseek-harness}"
 PORT="${E2E_PORT:-8872}"
 TOKEN=e2e-token
 DEVICE=e2e-device

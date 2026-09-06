@@ -3,13 +3,16 @@
  * 经 locate() 落位、映射学习。与 cordis 解耦，纯函数 + 显式 deps 便于单测。
  *
  * 硬约束（§4.3）：
- * - 落位路径一律由 persistence.locate(header) 计算，绝不自行复刻 projectKey 编码；
+ * - 落位路径一律由 persistence 端口的 locate(header) 计算，本模块绝不自行
+ *   复刻 projectKey 编码——v0 宿主透传服务方法，v1 宿主（locate 已私有化）
+ *   由 persistence-port.ts 的布局推导兜底；
  * - 对文件字节的唯一改写是首帧 JSON 的 cwd 字段，事件正文一字节不动；
  * - 落位后唯一的 dsh 调用是 workspaceRegistry 挂载（公开服务方法）——
  *   sessionQuery 的 list() 走 persistence.list() 扫盘，文件就位即被发现；
  *   但 web 侧边栏按 workspace 成员关系分组，不挂载的会话只进「未分组」桶。
  */
 import fsp from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { decryptLog, decryptMeta, type SessionMeta } from '../crypto/envelope.js'
 import type { SessionHeaderLike, SessionPersistenceLike } from '../dsh-types.js'
@@ -18,8 +21,12 @@ import { scanZstdFrames, zstdCompressAsync, zstdDecompressAsync, ZSTD_CHECKSUM_O
 import type { SyncClient } from './http-client.js'
 import type { StateStore } from './state.js'
 
-/** 本机支持的会话格式版本（dsh SESSION_FORMAT_VERSION，pre-release 恒为 0）。 */
-export const LOCAL_FORMAT_VERSION = 0
+/**
+ * 本机支持的会话格式版本兜底值（dsh core/session 的 SESSION_FORMAT_VERSION，
+ * rc.1 与 0.1.3-alpha.1 均为 2）。运行时基准优先取本机会话 header 的 version
+ * （见 fetchCatalog），本地无任何会话时才落到此常量。
+ */
+export const LOCAL_FORMAT_VERSION = 2
 
 /** 恢复目录的一行（Host 计算好解析结果，Client 只负责呈现与改选）。 */
 export interface CatalogEntry {
@@ -237,7 +244,11 @@ const META_SUFFIX = '.meta.enc'
 export async function fetchCatalog(deps: CatalogDeps): Promise<CatalogEntry[]> {
   const objects = await deps.client.list('sessions/')
   const metaKeys = objects.filter((object) => object.key.endsWith(META_SUFFIX))
-  const localIds = new Set((await deps.persistence.list()).map((header) => header.id))
+  const localHeaders = await deps.persistence.list()
+  const localIds = new Set(localHeaders.map((header) => header.id))
+  // 兼容基准优先取本机会话 header 的 version（即本机运行时的 SESSION_FORMAT_VERSION，
+  // 上游 bump 后随本地新会话自适应）；本地一个会话都没有才落到常量兜底
+  const localFormatVersion = localHeaders.reduce((max, header) => Math.max(max, header.version), LOCAL_FORMAT_VERSION)
   const mappings = deps.state.getGlobal().pathMappings
 
   const entries: CatalogEntry[] = []
@@ -266,7 +277,7 @@ export async function fetchCatalog(deps: CatalogDeps): Promise<CatalogEntry[]> {
       cwd: meta.cwd,
       formatVersion: meta.formatVersion,
       existsLocal,
-      versionIncompatible: meta.formatVersion > LOCAL_FORMAT_VERSION,
+      versionIncompatible: meta.formatVersion > localFormatVersion,
       resolvedCwd: resolution.cwd,
       resolution: resolution.kind,
     })
@@ -324,17 +335,23 @@ async function restoreOne(deps: RestoreDeps, item: RestoreRequest['items'][numbe
   if (header.id !== item.sessionId) throw new Error(`cloud object identity mismatch: key says ${item.sessionId}, header says ${header.id}`)
   const sourceCwd = header.cwd ?? ''
 
+  // 用户改选的落位路径：支持 ~ 与相对路径（相对本机 home），跨机恢复时
+  // 用户心智是「home 下的 my-app」，两台机器 home 不同也不影响落位。
+  const targetCwd = item.targetCwd !== null && item.targetCwd !== ''
+    ? normalizeTargetCwd(item.targetCwd)
+    : item.targetCwd
+
   // 路径归位：目标与来源不同才改写首帧 cwd，并学习实际使用的映射对（§4.3 步骤 4）。
   // 显式指定的目标目录必须先验证存在：写盘后失败无法回滚（同 id 重试会被拒绝覆盖）
   let locatedHeader: SessionHeaderLike = header
-  if (item.targetCwd !== null && item.targetCwd !== sourceCwd) {
+  if (targetCwd !== null && targetCwd !== sourceCwd) {
     if (sourceCwd === '') throw new Error('来源会话无 cwd，无法建立映射')
-    if (!(await isExistingDirectory(item.targetCwd))) {
-      throw new Error(`目标目录不存在或不是目录：${item.targetCwd}`)
+    if (!(await isExistingDirectory(targetCwd))) {
+      throw new Error(`目标目录不存在或不是目录：${targetCwd}`)
     }
-    plaintext = await rewriteCwd(plaintext, item.targetCwd)
-    locatedHeader = { ...header, cwd: item.targetCwd }
-    await learnMapping(deps.state, sourceCwd, item.targetCwd)
+    plaintext = await rewriteCwd(plaintext, targetCwd)
+    locatedHeader = { ...header, cwd: targetCwd }
+    await learnMapping(deps.state, sourceCwd, targetCwd)
   }
 
   const location = deps.persistence.locate(locatedHeader)
@@ -377,6 +394,19 @@ async function isExistingDirectory(target: string): Promise<boolean> {
 }
 
 /**
+ * 规范化用户改选的落位路径（§4.3）：`~` 展开到本机 home，相对路径按本机
+ * home 解析（跨机恢复最常见的心智模型——「home 下的 my-app」在两台
+ * 机器 home 不同的情况下仍落到各自 home 下）；绝对路径原样返回。
+ */
+export function normalizeTargetCwd(raw: string): string {
+  const trimmed = raw.trim()
+  if (trimmed === '' || trimmed === '~') return trimmed === '' ? '' : os.homedir()
+  if (trimmed.startsWith('~/')) return path.join(os.homedir(), trimmed.slice(2))
+  if (path.isAbsolute(trimmed)) return trimmed
+  return path.resolve(os.homedir(), trimmed)
+}
+
+/**
  * 恢复后抑制立刻回传（§4.5）：把刚落位的会话以当前 revision 记入 state，
  * 引擎下一轮 scan 不会把它当变更上传；待本机续写产生新 revision 后才作为
  * 本设备名下的独立对象全量首传（state 偏移为 0，链式段从头开始，meta 折叠
@@ -397,6 +427,7 @@ export async function markRestoredSynced(
       lastSegmentIndex: -1,
       lastTag: '',
       localRevision: snapshot.revision,
+      restoredAt: Date.now(),
       eventCount: 0,
       updatedAt: 0,
       status: 'ok',
