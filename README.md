@@ -35,15 +35,15 @@ DSH_SYNC_TOKENS="alice:<token-a>,bob:<token-b>" PORT=8787 pnpm start
 
 ## Step 2: Install the plugin in dsh
 
-Standard install (once published to npm):
+Install from npm:
 
 ```sh
-dsh plugin --profile web add dsh-cloud-sync
+dsh plugin --profile web add dsh-session-cloud
 ```
 
-Manual alternative: from the profile directory (default `~/.dsh/profiles/web/`) run `pnpm add dsh-cloud-sync`, then append the package name to the `dsh.profile.bundles` array in that directory's `package.json` and restart dsh.
+Manual alternative: from the profile directory (default `~/.dsh/profiles/web/`) run `pnpm add dsh-session-cloud`, then append the package name to the `dsh.profile.bundles` array in that directory's `package.json` and restart dsh.
 
-Before the npm release, build a tarball and install that: `pnpm --filter dsh-cloud-sync build && pnpm --filter dsh-cloud-sync pack`, then `dsh plugin --profile web add <path-to-tarball>`.
+Offline install (no npm registry access): build a tarball and install that: `pnpm --filter dsh-session-cloud build && pnpm --filter dsh-session-cloud pack`, then `dsh plugin --profile web add <path-to-tarball>`.
 
 ## Step 3: Configure
 
@@ -79,6 +79,6 @@ This repository is a monorepo: `packages/plugin` (the plugin) and `packages/serv
 ```sh
 pnpm install
 pnpm test                                        # all unit tests
-pnpm --filter dsh-cloud-sync typecheck && pnpm --filter dsh-cloud-sync build
+pnpm --filter dsh-session-cloud typecheck && pnpm --filter dsh-session-cloud build
 bash packages/plugin/test/e2e/m4/run.sh          # restore-flow e2e (self-driving)
 ```

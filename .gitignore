@@ -11,3 +11,4 @@ docs/
 packages/*/lib/
 packages/server/data/
 *.tgz
+publish-npm.sh

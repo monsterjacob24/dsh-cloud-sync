@@ -35,15 +35,15 @@ DSH_SYNC_TOKENS="alice:<token-a>,bob:<token-b>" PORT=8787 pnpm start
 
 ## 第二步：在 dsh 中安装插件
 
-标准安装（发布到 npm 后）：
+从 npm 安装：
 
 ```sh
-dsh plugin --profile web add dsh-cloud-sync
+dsh plugin --profile web add dsh-session-cloud
 ```
 
-也可以手动安装：在 profile 目录（默认 `~/.dsh/profiles/web/`）执行 `pnpm add dsh-cloud-sync`，再把包名追加进该目录 `package.json` 的 `dsh.profile.bundles` 数组，重启 dsh。
+也可以手动安装：在 profile 目录（默认 `~/.dsh/profiles/web/`）执行 `pnpm add dsh-session-cloud`，再把包名追加进该目录 `package.json` 的 `dsh.profile.bundles` 数组，重启 dsh。
 
-尚未发布到 npm 时，可先在本仓库构建 tarball 安装：`pnpm --filter dsh-cloud-sync build && pnpm --filter dsh-cloud-sync pack`，然后 `dsh plugin --profile web add <tarball 路径>`。
+离线安装（无法访问 npm 源时）：在本仓库构建 tarball 安装：`pnpm --filter dsh-session-cloud build && pnpm --filter dsh-session-cloud pack`，然后 `dsh plugin --profile web add <tarball 路径>`。
 
 ## 第三步：配置
 
@@ -79,6 +79,6 @@ dsh plugin --profile web add dsh-cloud-sync
 ```sh
 pnpm install
 pnpm test                                        # 全部单测
-pnpm --filter dsh-cloud-sync typecheck && pnpm --filter dsh-cloud-sync build
+pnpm --filter dsh-session-cloud typecheck && pnpm --filter dsh-session-cloud build
 bash packages/plugin/test/e2e/m4/run.sh          # 恢复流程 e2e（自驱动）
 ```

@@ -1,9 +1,9 @@
-# dsh-cloud-sync 组合包 patch（npm 分发链路，docs/02 §8.1）。
-# 用户执行 dsh plugin --profile web add dsh-cloud-sync 后，dsh 按
+# dsh-session-cloud 组合包 patch（npm 分发链路，docs/02 §8.1）。
+# 用户执行 dsh plugin --profile web add dsh-session-cloud 后，dsh 按
 # dsh.bundle.patch 找到本文件，把下行插件行合并进 profile 插件清单；
 # name 用包名（非路径），让 Node 模块解析从已安装的 node_modules 加载。
 # 与开发态 --patch（packages/plugin/test/e2e/dev.patch.yml，相对路径直挂
 # src/index.ts）同构，只是引用方式不同。
 - insert:
     - id: cloud-sync
-      name: dsh-cloud-sync
+      name: dsh-session-cloud

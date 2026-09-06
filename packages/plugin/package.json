@@ -1,5 +1,5 @@
 {
-  "name": "dsh-cloud-sync",
+  "name": "dsh-session-cloud",
   "version": "0.1.0",
   "description": "E2E-encrypted cloud mirror plugin for deepseek-harness sessions",
   "type": "module",
